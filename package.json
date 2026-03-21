@@ -1,0 +1,14 @@
+{
+  "name": "autobank",
+  "version": "1.0.0",
+  "description": "Self-Sustaining Agent Lending Protocol - Tether WDK Hackathon",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cd ../agents && npm install",
+    "start": "concurrently \"cd frontend && npm start\" \"cd agents && npx ts-node src/index.ts\"",
+    "dev": "concurrently \"cd frontend && npm run dev\" \"cd agents && npx ts-node src/index.ts\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

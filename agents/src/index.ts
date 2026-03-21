@@ -6,6 +6,8 @@ import { LenderAgent } from './lenderAgent'
 import { BorrowerAgent } from './borrowerAgent'
 import { ArbiterAgent } from './arbiterAgent'
 import { startWsServer, broadcastLog, broadcastStats } from './wsServer'
+import * as fs from 'fs'
+import * as path from 'path'
 
 const logger = new Logger('AUTOBANK')
 
@@ -37,13 +39,31 @@ async function main(): Promise<void> {
       const arbiterWallet = walletManager.createWallet()
 
       console.log('━━━ FIRST RUN: Wallet addresses generated ━━━')
-      console.log('Add these to your agents/.env file:')
-      console.log(`LENDER_PRIVATE_KEY=${lenderWallet.privateKey}`)
-      console.log(`BORROWER_PRIVATE_KEY=${borrowerWallet.privateKey}`)
-      console.log(`ARBITER_PRIVATE_KEY=${arbiterWallet.privateKey}`)
-      console.log(`LENDER_ADDRESS=${lenderWallet.address}`)
-      console.log(`BORROWER_ADDRESS=${borrowerWallet.address}`)
-      console.log(`ARBITER_ADDRESS=${arbiterWallet.address}`)
+
+      // Write private keys to local file (NEVER commit this file)
+      const keysContent = `# AUTOBANK WALLET KEYS — NEVER COMMIT THIS FILE
+# Generated: ${new Date().toISOString()}
+# IMPORTANT: Delete this file after adding keys to .env
+LENDER_PRIVATE_KEY=${lenderWallet.privateKey}
+BORROWER_PRIVATE_KEY=${borrowerWallet.privateKey}
+ARBITER_PRIVATE_KEY=${arbiterWallet.privateKey}
+LENDER_ADDRESS=${lenderWallet.address}
+BORROWER_ADDRESS=${borrowerWallet.address}
+ARBITER_ADDRESS=${arbiterWallet.address}
+`
+      const keysFilePath = path.join(process.cwd(), 'wallet-keys.txt')
+      fs.writeFileSync(keysFilePath, keysContent)
+
+      // Print only addresses to console — NEVER print private keys
+      console.log('✓ Wallet addresses generated:')
+      console.log(`  Lender:   ${lenderWallet.address}`)
+      console.log(`  Borrower: ${borrowerWallet.address}`)
+      console.log(`  Arbiter:  ${arbiterWallet.address}`)
+      console.log('')
+      console.log('✓ Private keys saved to: wallet-keys.txt')
+      console.log('  ⚠️  NEVER commit wallet-keys.txt to git!')
+      console.log('  ⚠️  Copy the keys to agents/.env')
+      console.log('  ⚠️  Delete wallet-keys.txt after use')
       console.log('━━━ Then run again ━━━')
       process.exit(0)
     }

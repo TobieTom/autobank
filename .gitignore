@@ -19,6 +19,7 @@
 *secret*
 *mnemonic*
 *seed*
+wallet-keys.txt
 
 # Dependencies
 node_modules/

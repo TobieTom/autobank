@@ -15,10 +15,21 @@ const logger = new Logger('WsServer')
 
 const httpServer = http.createServer()
 
+// Get allowed origins from environment, or default to localhost
+const getAllowedOrigins = (): string[] => {
+  const envOrigins = process.env.ALLOWED_ORIGINS
+  if (envOrigins) {
+    return envOrigins.split(',').map(origin => origin.trim())
+  }
+  // Default to localhost for development
+  return ['http://localhost:3000', 'http://localhost:3001']
+}
+
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: getAllowedOrigins(),
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 })
 

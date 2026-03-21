@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   AUTOBANK Design System — CSS Variables
+   ============================================ */
+
+:root {
+  /* Backgrounds */
+  --bg:              #08080F;
+  --surface:         #0F0F1A;
+  --surface-raised:  #141420;
+
+  /* Borders */
+  --border:          #1E1E2E;
+
+  /* Accent palette */
+  --accent:          #00D4FF;
+  --success:         #00FF94;
+  --warning:         #FFB800;
+  --danger:          #FF4560;
+
+  /* Typography */
+  --text-primary:    #F0F0FF;
+  --text-secondary:  #8888AA;
+
+  /* Glow helpers */
+  --glow-accent:     0 0 12px rgba(0, 212, 255, 0.6), 0 0 40px rgba(0, 212, 255, 0.2);
+  --glow-success:    0 0 12px rgba(0, 255, 148, 0.6), 0 0 40px rgba(0, 255, 148, 0.2);
+  --glow-danger:     0 0 12px rgba(255, 69, 96, 0.6),  0 0 40px rgba(255, 69, 96, 0.2);
+}
+
+/* ============================================
+   Base Reset
+   ============================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* ============================================
+   Noise Texture Overlay
+   ============================================ */
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+/* ============================================
+   Scanline Animation
+   ============================================ */
+
+@keyframes scanline {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    transparent,
+    rgba(0, 212, 255, 0.04),
+    transparent
+  );
+  z-index: 1;
+  pointer-events: none;
+  animation: scanline 8s linear infinite;
+}
+
+/* ============================================
+   Terminal Cursor Blink
+   ============================================ */
+
+@keyframes cursor-blink {
+  0%, 49%  { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '▋';
+  display: inline-block;
+  color: var(--accent);
+  animation: cursor-blink 1s step-end infinite;
+  margin-left: 2px;
+}
+
+/* ============================================
+   Glow Effects
+   ============================================ */
+
+.glow-accent {
+  text-shadow: var(--glow-accent);
+  color: var(--accent);
+}
+
+.glow-success {
+  text-shadow: var(--glow-success);
+  color: var(--success);
+}
+
+.glow-danger {
+  text-shadow: var(--glow-danger);
+  color: var(--danger);
+}
+
+.glow-box-accent {
+  box-shadow: var(--glow-accent);
+  border-color: var(--accent);
+}
+
+/* ============================================
+   Custom Scrollbar
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+/* ============================================
+   Text Selection
+   ============================================ */
+
+::selection {
+  background: rgba(0, 212, 255, 0.25);
+  color: var(--text-primary);
+}
+
+/* ============================================
+   Typography Utilities
+   ============================================ */
+
+.font-display {
+  font-family: var(--font-syne), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-jetbrains-mono), 'Courier New', monospace;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

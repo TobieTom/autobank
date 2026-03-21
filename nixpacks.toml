@@ -2,7 +2,11 @@
 nixPkgs = ["nodejs_20", "npm-9_x"]
 
 [phases.install]
-cmds = ["npm install", "cd frontend && npm install", "cd ../agents && npm install"]
+cmds = [
+  "npm install",
+  "npm install --prefix frontend",
+  "npm install --prefix agents"
+]
 
 [phases.build]
 cmds = ["cd frontend && npm run build"]

@@ -25,10 +25,27 @@ async function main(): Promise<void> {
     const walletManager = new WalletManager()
     const reputationEngine = new ReputationEngine()
 
-    // Create three wallets — log addresses only, never private keys
-    const lenderWallet = walletManager.createWallet()
-    const borrowerWallet = walletManager.createWallet()
-    const arbiterWallet = walletManager.createWallet()
+    // Load persistent wallets from .env, or generate on first run and exit
+    if (!config.lenderPrivateKey || !config.borrowerPrivateKey || !config.arbiterPrivateKey) {
+      const lenderWallet = walletManager.createWallet()
+      const borrowerWallet = walletManager.createWallet()
+      const arbiterWallet = walletManager.createWallet()
+
+      console.log('━━━ FIRST RUN: Wallet addresses generated ━━━')
+      console.log('Add these to your agents/.env file:')
+      console.log(`LENDER_PRIVATE_KEY=${lenderWallet.privateKey}`)
+      console.log(`BORROWER_PRIVATE_KEY=${borrowerWallet.privateKey}`)
+      console.log(`ARBITER_PRIVATE_KEY=${arbiterWallet.privateKey}`)
+      console.log(`LENDER_ADDRESS=${lenderWallet.address}`)
+      console.log(`BORROWER_ADDRESS=${borrowerWallet.address}`)
+      console.log(`ARBITER_ADDRESS=${arbiterWallet.address}`)
+      console.log('━━━ Then run again ━━━')
+      process.exit(0)
+    }
+
+    const lenderWallet = walletManager.loadWallet(config.lenderPrivateKey)
+    const borrowerWallet = walletManager.loadWallet(config.borrowerPrivateKey)
+    const arbiterWallet = walletManager.loadWallet(config.arbiterPrivateKey)
 
     logger.info('Lender wallet', { address: lenderWallet.address })
     logger.info('Borrower wallet', { address: borrowerWallet.address })
@@ -56,6 +73,22 @@ async function main(): Promise<void> {
     )
 
     logger.info('All agents initialized. Starting autonomous loop...')
+
+    // ─── Reputation Seeding for Demo ──────────────────────────────────────
+    logger.info('━━━ Seeding borrower reputation for demo ━━━')
+    reputationEngine.getOrCreate('borrower-001', borrowerWallet.address)
+    reputationEngine.recordLoanRequest('borrower-001')
+    reputationEngine.recordLoanRequest('borrower-001')
+    reputationEngine.recordLoanRequest('borrower-001')
+    reputationEngine.recordLoanRequest('borrower-001')
+    reputationEngine.recordRepayment('borrower-001', 25)
+    reputationEngine.recordRepayment('borrower-001', 25)
+    reputationEngine.recordRepayment('borrower-001', 25)
+    reputationEngine.recordRepayment('borrower-001', 50)
+    const seededScores = reputationEngine.getAllScores()
+    const seededBorrower = seededScores.find((s) => s.agentId === 'borrower-001')
+    logger.info('Borrower seeded score', { agentId: 'borrower-001', score: seededBorrower?.score })
+    logger.info('Reputation seeded. Borrower ready for autonomous loop.')
 
     // ─── Autonomous Loop — 3 cycles ───────────────────────────────────────
     for (let cycle = 1; cycle <= 3; cycle++) {

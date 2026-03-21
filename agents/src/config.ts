@@ -14,6 +14,12 @@ interface Config {
   port: number
   logLevel: string
   nodeEnv: string
+  lenderPrivateKey: string | undefined
+  borrowerPrivateKey: string | undefined
+  arbiterPrivateKey: string | undefined
+  lenderAddress: string | undefined
+  borrowerAddress: string | undefined
+  arbiterAddress: string | undefined
 }
 
 function requireEnv(key: string): string {
@@ -50,6 +56,12 @@ export const config: Config = {
   port: requireEnvNumber('PORT'),
   logLevel: requireEnv('LOG_LEVEL'),
   nodeEnv: requireEnv('NODE_ENV'),
+  lenderPrivateKey: process.env['LENDER_PRIVATE_KEY'] || undefined,
+  borrowerPrivateKey: process.env['BORROWER_PRIVATE_KEY'] || undefined,
+  arbiterPrivateKey: process.env['ARBITER_PRIVATE_KEY'] || undefined,
+  lenderAddress: process.env['LENDER_ADDRESS'] || undefined,
+  borrowerAddress: process.env['BORROWER_ADDRESS'] || undefined,
+  arbiterAddress: process.env['ARBITER_ADDRESS'] || undefined,
 }
 
 export default config

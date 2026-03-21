@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
+import { io } from 'socket.io-client'
 
 // ── Metric definitions ─────────────────────────────────────
 const METRICS = [
@@ -42,6 +43,15 @@ const METRICS = [
   },
 ]
 
+interface SystemStats {
+  totalLoansIssued:   number
+  totalVolumeUSDT:    number
+  totalFeesCollected: number
+  feesUsedForCompute: number
+  activeLoans:        number
+  defaultRate:        number
+}
+
 // Ticker text — must be long enough that two copies exceed viewport width
 const TICKER_CHUNK =
   'LENDER AGENT ACTIVE  ·  BORROWER AGENT ACTIVE  ·  ARBITER AGENT ACTIVE  ·  ' +
@@ -50,9 +60,11 @@ const TICKER_CHUNK =
 
 // ── Component ──────────────────────────────────────────────
 export default function ProtocolVitals() {
-  const sectionRef = useRef<HTMLElement>(null)
-  const valRefs    = useRef<(HTMLSpanElement | null)[]>([])
-  const animated   = useRef(false)
+  const sectionRef  = useRef<HTMLElement>(null)
+  const valRefs     = useRef<(HTMLSpanElement | null)[]>([])
+  const animated    = useRef(false)
+  const currentVals = useRef(METRICS.map(m => m.start))
+  const initialized = useRef(false)
 
   // Count-up on scroll into view
   useEffect(() => {
@@ -70,7 +82,10 @@ export default function ProtocolVitals() {
             duration: m.target === 0 ? 0.4 : 1.8,
             ease:     'power3.out',
             delay:    i * 0.14,
-            onUpdate: () => { el.textContent = m.format(proxy.v) },
+            onUpdate: () => {
+              el.textContent = m.format(proxy.v)
+              currentVals.current[i] = proxy.v
+            },
           })
         })
       },
@@ -78,6 +93,49 @@ export default function ProtocolVitals() {
     )
     if (sectionRef.current) observer.observe(sectionRef.current)
     return () => observer.disconnect()
+  }, [])
+
+  // Socket.io — update metrics when real stats arrive
+  useEffect(() => {
+    if (initialized.current) return
+    initialized.current = true
+
+    const socket = io('http://localhost:3001', { autoConnect: false })
+
+    socket.on('agent:stats', (stats: SystemStats) => {
+      const newTargets = [
+        stats.totalLoansIssued,
+        stats.totalVolumeUSDT,
+        stats.totalFeesCollected,
+        stats.feesUsedForCompute,
+        stats.defaultRate,
+      ]
+
+      newTargets.forEach((target, i) => {
+        const el = valRefs.current[i]
+        if (!el) return
+        const from = currentVals.current[i]
+        if (from === target) return
+        const proxy = { v: from }
+        gsap.to(proxy, {
+          v:        target,
+          duration: 1.4,
+          ease:     'power3.out',
+          onUpdate: () => {
+            el.textContent = METRICS[i].format(proxy.v)
+            currentVals.current[i] = proxy.v
+          },
+        })
+      })
+    })
+
+    socket.connect()
+
+    return () => {
+      socket.removeAllListeners()
+      socket.disconnect()
+      initialized.current = false
+    }
   }, [])
 
   return (

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { io } from 'socket.io-client'
 
 // ── Types ──────────────────────────────────────────────────
 type AgentType = 'lender' | 'borrower' | 'arbiter'
@@ -17,6 +18,15 @@ interface AgentState {
   lastTx:        string
   uptime:        number      // seconds
   activity:      number[]   // sparkline heights 0–100
+}
+
+interface SystemStats {
+  totalLoansIssued:   number
+  totalVolumeUSDT:    number
+  totalFeesCollected: number
+  feesUsedForCompute: number
+  activeLoans:        number
+  defaultRate:        number
 }
 
 // ── Static base config ─────────────────────────────────────
@@ -188,6 +198,7 @@ export default function AgentStatusBar() {
   const [agents, setAgents] = useState<AgentState[]>(
     BASE_AGENTS.map(a => ({ ...a, uptime: Math.floor(Math.random() * 60) + 30 }))
   )
+  const initialized = useRef(false)
 
   // Tick uptime and randomize activity bars
   useEffect(() => {
@@ -202,6 +213,30 @@ export default function AgentStatusBar() {
       })))
     }, 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Socket.io — real stats
+  useEffect(() => {
+    if (initialized.current) return
+    initialized.current = true
+
+    const socket = io('http://localhost:3001', { autoConnect: false })
+
+    socket.on('agent:stats', (stats: SystemStats) => {
+      setAgents(prev => prev.map(agent => ({
+        ...agent,
+        loansHandled: stats.totalLoansIssued,
+        usdtVolume:   stats.totalVolumeUSDT,
+      })))
+    })
+
+    socket.connect()
+
+    return () => {
+      socket.removeAllListeners()
+      socket.disconnect()
+      initialized.current = false
+    }
   }, [])
 
   return (

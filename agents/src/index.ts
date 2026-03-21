@@ -5,6 +5,7 @@ import { ReputationEngine } from './reputationEngine'
 import { LenderAgent } from './lenderAgent'
 import { BorrowerAgent } from './borrowerAgent'
 import { ArbiterAgent } from './arbiterAgent'
+import { startWsServer, broadcastLog, broadcastStats } from './wsServer'
 
 const logger = new Logger('AUTOBANK')
 
@@ -20,6 +21,10 @@ async function main(): Promise<void> {
     logger.info('║  Self-Sustaining Agent Lending     ║')
     logger.info('║  Tether WDK Hackathon Galactica    ║')
     logger.info('╚════════════════════════════════════╝')
+
+    // Start WebSocket server and wire broadcaster into Logger
+    startWsServer()
+    Logger.setBroadcaster(broadcastLog)
 
     // Initialize infrastructure
     const walletManager = new WalletManager()
@@ -74,6 +79,11 @@ async function main(): Promise<void> {
 
     logger.info('All agents initialized. Starting autonomous loop...')
 
+    setTimeout(() => {
+      logger.info('Auto-shutdown after 60s test window')
+      process.exit(0)
+    }, 60000)
+
     // ─── Reputation Seeding for Demo ──────────────────────────────────────
     logger.info('━━━ Seeding borrower reputation for demo ━━━')
     reputationEngine.getOrCreate('borrower-001', borrowerWallet.address)
@@ -90,10 +100,12 @@ async function main(): Promise<void> {
     logger.info('Borrower seeded score', { agentId: 'borrower-001', score: seededBorrower?.score })
     logger.info('Reputation seeded. Borrower ready for autonomous loop.')
 
-    // ─── Autonomous Loop — 3 cycles ───────────────────────────────────────
-    for (let cycle = 1; cycle <= 3; cycle++) {
+    // ─── Autonomous Loop — continuous until Ctrl+C or auto-shutdown ──────
+    let cycle = 0
+    while (true) {
+      cycle++
       const currentBlock = await walletManager.getBlockNumber()
-      logger.info(`── Cycle ${cycle} / 3 — Block ${currentBlock} ──`)
+      logger.info(`── Cycle ${cycle} — Block ${currentBlock} ──`)
 
       // STEP 1 — Borrower decides whether to borrow
       let loanRequest = await borrowerAgent.decideToBorrow()
@@ -119,6 +131,24 @@ async function main(): Promise<void> {
 
               const fee = loanRequest.amount * config.protocolFeePercent / 100
               await arbiterAgent.collectProtocolFee(fee)
+
+              // STEP 3.5 — Borrower repays the loan
+              logger.info('Waiting 3s before repayment...')
+              await sleep(3000)
+
+              const repaymentSuccess = await borrowerAgent.repayLoan(loan, lenderWallet.address)
+              if (repaymentSuccess) {
+                logger.success('Loan repayment confirmed', {
+                  loanId: loan.id,
+                  borrower: borrowerWallet.address,
+                  lender: lenderWallet.address,
+                  amount: loan.request.amount,
+                })
+              } else {
+                logger.error('Loan repayment failed — will retry in next cycle', {
+                  loanId: loan.id,
+                })
+              }
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
@@ -142,25 +172,11 @@ async function main(): Promise<void> {
         activeLoans: stats.activeLoans,
       })
 
-      if (cycle < 3) {
-        logger.info('Waiting 2s before next cycle...')
-        await sleep(2000)
-      }
+      broadcastStats(stats)
+
+      logger.info('Waiting 2s before next cycle...')
+      await sleep(2000)
     }
-
-    // ─── Final Summary ─────────────────────────────────────────────────────
-    const finalStats = arbiterAgent.getSystemStats()
-    logger.success('Final system stats', {
-      totalLoansIssued: finalStats.totalLoansIssued,
-      totalVolumeUSDT: finalStats.totalVolumeUSDT,
-      totalFeesCollected: finalStats.totalFeesCollected,
-      feesUsedForCompute: finalStats.feesUsedForCompute,
-      activeLoans: finalStats.activeLoans,
-      defaultRate: finalStats.defaultRate,
-    })
-
-    logger.success('AUTOBANK autonomous loop complete')
-    logger.success('This system is self-sustaining — agents funded their own compute')
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     logger.error(`FATAL: ${message}`)

@@ -23,6 +23,7 @@ function validateAmount(amount: number, label: string): void {
 export class ArbiterAgent {
   private walletManager: WalletManager
   private reputationEngine: ReputationEngine
+  private arbiterPrivateKey: string
   private arbiterAddress: string
   private protocolTreasuryAddress: string
   private logger: Logger
@@ -40,6 +41,7 @@ export class ArbiterAgent {
   ) {
     this.walletManager = walletManager
     this.reputationEngine = reputationEngine
+    this.arbiterPrivateKey = arbiterPrivateKey
     this.protocolTreasuryAddress = protocolTreasuryAddress
     this.logger = new Logger('ArbiterAgent')
     this.activeLoans = []
@@ -198,7 +200,8 @@ export class ArbiterAgent {
    */
   async payForCompute(): Promise<void> {
     try {
-      const paymentAmount = this.feesCollectedSinceLastPayment
+      // Always send exactly COMPUTE_COST_THRESHOLD (0.1 USDT) for compute
+      const paymentAmount = COMPUTE_COST_THRESHOLD
 
       // Check treasury balance before paying
       const treasuryBalance = await this.walletManager.getUsdtBalance(
@@ -211,6 +214,25 @@ export class ArbiterAgent {
         treasuryAddress: this.protocolTreasuryAddress,
       })
 
+      // Send real USDT from arbiter wallet to treasury for compute costs
+      let txHash: string
+      try {
+        txHash = await this.walletManager.sendUsdt(
+          this.arbiterPrivateKey,
+          this.protocolTreasuryAddress,
+          paymentAmount.toString()
+        )
+      } catch (txErr) {
+        const message = txErr instanceof Error ? txErr.message : String(txErr)
+        this.logger.error('Compute payment transaction failed', {
+          error: message,
+          paymentAmount,
+          toAddress: this.protocolTreasuryAddress,
+        })
+        // Don't crash — log the error and continue
+        return
+      }
+
       // Record the compute payment
       const payment: ComputePayment = {
         id: `compute-${Date.now()}`,
@@ -219,7 +241,7 @@ export class ArbiterAgent {
         fromAddress: this.arbiterAddress,
         toAddress: this.protocolTreasuryAddress,
         purpose: 'Groq LLM compute costs — autonomous AI agent operation',
-        txHash: `simulated-${Date.now()}`,
+        txHash,
         timestamp: Date.now(),
       }
 
@@ -234,6 +256,7 @@ export class ArbiterAgent {
           paymentAmount,
           totalFeesUsedForCompute: this.systemStats.feesUsedForCompute,
           computePaymentId: payment.id,
+          txHash,
           purpose: payment.purpose,
         }
       )

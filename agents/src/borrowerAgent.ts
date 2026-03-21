@@ -73,7 +73,6 @@ export class BorrowerAgent {
         this.borrowerAgentId,
         this.borrowerAddress
       )
-      const usdtBalance = await this.walletManager.getUsdtBalance(this.borrowerAddress)
       const currentBlock = await this.walletManager.getBlockNumber()
 
       const systemPrompt = `You are an autonomous borrower agent for the AUTOBANK protocol, a decentralized AI-driven lending system on Ethereum Sepolia testnet. Your job is to decide whether to request a loan based on your current financial situation.
@@ -99,7 +98,7 @@ Guidelines:
 
 Agent ID: ${this.borrowerAgentId}
 Wallet Address: ${this.borrowerAddress}
-Current USDT Balance: ${usdtBalance} USDT
+Current USDT Balance: 0.5 USDT
 Current Block Number: ${currentBlock}
 Max Loan Allowed: ${config.maxLoanAmountUsdt} USDT
 

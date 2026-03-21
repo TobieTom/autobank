@@ -6,8 +6,21 @@
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'success' | 'agent' | 'tx'
 
+type BroadcastFn = (entry: {
+  timestamp: string
+  level: string
+  module: string
+  message: string
+  data?: Record<string, unknown>
+}) => void
+
 export class Logger {
   private module: string
+  private static broadcaster: BroadcastFn | null = null
+
+  static setBroadcaster(fn: BroadcastFn): void {
+    Logger.broadcaster = fn
+  }
 
   constructor(module: string) {
     this.module = module
@@ -113,6 +126,7 @@ export class Logger {
       const timestamp = this.getTimestamp()
       const entry = this.formatLogEntry(timestamp, 'info', message, data)
       console.log(entry)
+      try { Logger.broadcaster?.({ timestamp, level: 'info', module: this.module, message, data }) } catch { /* noop */ }
     } catch {
       // Never throw from logging
     }
@@ -126,6 +140,7 @@ export class Logger {
       const timestamp = this.getTimestamp()
       const entry = this.formatLogEntry(timestamp, 'warn', message, data)
       console.warn(entry)
+      try { Logger.broadcaster?.({ timestamp, level: 'warn', module: this.module, message, data }) } catch { /* noop */ }
     } catch {
       // Never throw from logging
     }
@@ -139,6 +154,7 @@ export class Logger {
       const timestamp = this.getTimestamp()
       const entry = this.formatLogEntry(timestamp, 'error', message, data)
       console.error(entry)
+      try { Logger.broadcaster?.({ timestamp, level: 'error', module: this.module, message, data }) } catch { /* noop */ }
     } catch {
       // Never throw from logging
     }
@@ -152,6 +168,7 @@ export class Logger {
       const timestamp = this.getTimestamp()
       const entry = this.formatLogEntry(timestamp, 'success', message, data)
       console.log(entry)
+      try { Logger.broadcaster?.({ timestamp, level: 'success', module: this.module, message, data }) } catch { /* noop */ }
     } catch {
       // Never throw from logging
     }
@@ -165,6 +182,7 @@ export class Logger {
       const timestamp = this.getTimestamp()
       const entry = this.formatLogEntry(timestamp, 'agent', message, data)
       console.log(entry)
+      try { Logger.broadcaster?.({ timestamp, level: 'agent', module: this.module, message, data }) } catch { /* noop */ }
     } catch {
       // Never throw from logging
     }
@@ -184,6 +202,7 @@ export class Logger {
       const txInfo = { txHash, ...data }
       const entry = this.formatLogEntry(timestamp, 'tx', message, txInfo)
       console.log(entry)
+      try { Logger.broadcaster?.({ timestamp, level: 'tx', module: this.module, message, data: txInfo }) } catch { /* noop */ }
     } catch {
       // Never throw from logging
     }

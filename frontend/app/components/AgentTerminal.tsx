@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { io } from 'socket.io-client'
 
 // ── Types ──────────────────────────────────────────────────
 type LogLevel = 'INFO' | 'SUCCESS' | 'AGENT' | 'TX' | 'WARN' | 'ERROR'
@@ -13,7 +14,20 @@ interface LogEntry {
   message:   string
 }
 
-// ── Simulated log pool (mirrors real agent output) ─────────
+// ── Level mapping (server sends lowercase) ─────────────────
+function toLevel(raw: string): LogLevel {
+  const map: Record<string, LogLevel> = {
+    info:    'INFO',
+    success: 'SUCCESS',
+    agent:   'AGENT',
+    tx:      'TX',
+    warn:    'WARN',
+    error:   'ERROR',
+  }
+  return map[raw.toLowerCase()] ?? 'INFO'
+}
+
+// ── Simulated log pool — kept as seed data ─────────────────
 const LOG_POOL: Omit<LogEntry, 'id' | 'timestamp'>[] = [
   { level: 'INFO',    module: 'ArbiterAgent',     message: 'Monitor loop starting — block 10491047, 3 active loans' },
   { level: 'AGENT',   module: 'BorrowerAgent',    message: 'Borrow decision made — amount: 10 USDT, duration: 200 blocks' },
@@ -25,18 +39,6 @@ const LOG_POOL: Omit<LogEntry, 'id' | 'timestamp'>[] = [
   { level: 'TX',      module: 'LenderAgent',      message: 'Loan issued successfully | loanId: 1774099347619 → 0xA9dD...587a4 | dueBlock: 10491249' },
   { level: 'SUCCESS', module: 'ArbiterAgent',     message: 'Protocol fee collected — 0.05 USDT | totalFeesCollected: 0.05' },
   { level: 'AGENT',   module: 'ReputationEngine', message: 'Repayment recorded — agentId: borrower-001, amount: 10 USDT, score: 79.17' },
-  { level: 'INFO',    module: 'ArbiterAgent',     message: 'Monitor loop complete — loansChecked: 2, dueLoans: 0, defaultsHandled: 0' },
-  { level: 'AGENT',   module: 'BorrowerAgent',    message: 'Borrow decision made — shouldBorrow: true, amount: 20 USDT, reasoning: low balance, decent score' },
-  { level: 'AGENT',   module: 'LenderAgent',      message: 'AI loan decision made — approved: true, interestRate: 4.5%, score: 76.33' },
-  { level: 'SUCCESS', module: 'LenderAgent',      message: 'Loan approved — 20 USDT at 4.5% interest' },
-  { level: 'TX',      module: 'WalletManager',    message: 'USDT transfer submitted | txHash: 0x17a01c89800b89c1bd3d11e63c82b0c1f2ca...' },
-  { level: 'TX',      module: 'WalletManager',    message: 'USDT transfer confirmed | txHash: 0x17a01c89800b89c1bd3d11e63c82b0c1f2ca...' },
-  { level: 'SUCCESS', module: 'ArbiterAgent',     message: 'Protocol fee collected — 0.10 USDT | feesUntilNextComputePayment: 0.0000' },
-  { level: 'AGENT',   module: 'ArbiterAgent',     message: 'Initiating self-sustaining compute payment — paymentAmount: 0.15 USDT' },
-  { level: 'SUCCESS', module: 'ArbiterAgent',     message: 'AUTOBANK is self-sustaining — fees paid for compute | purpose: Groq LLM costs' },
-  { level: 'WARN',    module: 'WalletManager',    message: 'getUsdtBalance: retrying after provider timeout — attempt 2/3' },
-  { level: 'INFO',    module: 'WalletManager',    message: 'Provider initialized — chainId: 11155111, endpoint: eth-sepolia.g.alchemy.com' },
-  { level: 'AGENT',   module: 'LenderAgent',      message: 'LenderAgent initialized — lenderAddress: 0x137B...e6fD' },
 ]
 
 // ── Level styling maps ─────────────────────────────────────
@@ -60,16 +62,18 @@ const LEVEL_BG: Record<LogLevel, string> = {
 
 // ── Helpers ────────────────────────────────────────────────
 let uid = 0
-function mkEntry(base: Omit<LogEntry, 'id' | 'timestamp'>): LogEntry {
+function mkEntry(base: Omit<LogEntry, 'id' | 'timestamp'>, ts?: string): LogEntry {
   return {
     ...base,
     id:        ++uid,
-    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19) + 'Z',
+    timestamp: ts
+      ? ts.replace('T', ' ').slice(0, 19) + 'Z'
+      : new Date().toISOString().replace('T', ' ').slice(0, 19) + 'Z',
   }
 }
 
 // Seed initial lines with staggered timestamps
-const INITIAL_LOGS: LogEntry[] = LOG_POOL.slice(0, 10).map((e, i) => ({
+const INITIAL_LOGS: LogEntry[] = LOG_POOL.map((e, i) => ({
   ...e,
   id:        ++uid,
   timestamp: new Date(Date.now() - (10 - i) * 1500).toISOString().replace('T', ' ').slice(0, 19) + 'Z',
@@ -77,10 +81,11 @@ const INITIAL_LOGS: LogEntry[] = LOG_POOL.slice(0, 10).map((e, i) => ({
 
 // ── Component ──────────────────────────────────────────────
 export default function AgentTerminal() {
-  const [logs, setLogs]     = useState<LogEntry[]>(INITIAL_LOGS)
-  const [newId, setNewId]   = useState<number | null>(null)
-  const scrollRef           = useRef<HTMLDivElement>(null)
-  const poolIdxRef          = useRef(10)
+  const [logs, setLogs]           = useState<LogEntry[]>(INITIAL_LOGS)
+  const [newId, setNewId]         = useState<number | null>(null)
+  const [connected, setConnected] = useState(false)
+  const scrollRef                 = useRef<HTMLDivElement>(null)
+  const initialized               = useRef(false)
 
   // Auto-scroll to bottom whenever logs change
   useEffect(() => {
@@ -88,18 +93,63 @@ export default function AgentTerminal() {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [logs])
 
-  // Stream a new line every 1.5 s
+  // Socket.io — real agent log stream
   useEffect(() => {
-    const interval = setInterval(() => {
-      const base  = LOG_POOL[poolIdxRef.current % LOG_POOL.length]
-      poolIdxRef.current++
-      const entry = mkEntry(base)
+    if (initialized.current) return
+    initialized.current = true
+
+    const socket = io('http://localhost:3001', {
+      autoConnect: false,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 3000,
+    })
+
+    socket.on('connect', () => {
+      setConnected(true)
+      const entry = mkEntry({ level: 'INFO', module: 'System', message: 'Connected to AUTOBANK agents — live feed active' })
       setNewId(entry.id)
-      setLogs(prev => [...prev, entry].slice(-60)) // keep last 60
-      // Clear "new" flag after animation completes
+      setLogs(prev => [...prev, entry].slice(-100))
       setTimeout(() => setNewId(null), 600)
-    }, 1500)
-    return () => clearInterval(interval)
+    })
+
+    socket.on('disconnect', () => {
+      setConnected(false)
+      const entry = mkEntry({ level: 'WARN', module: 'System', message: 'Connection lost — reconnecting...' })
+      setNewId(entry.id)
+      setLogs(prev => [...prev, entry].slice(-100))
+      setTimeout(() => setNewId(null), 600)
+    })
+
+    socket.on('agent:log', (data: { timestamp: string; level: string; module: string; message: string }) => {
+      const entry = mkEntry(
+        { level: toLevel(data.level), module: data.module, message: data.message },
+        data.timestamp,
+      )
+      setNewId(entry.id)
+      setLogs(prev => [...prev, entry].slice(-100))
+      setTimeout(() => setNewId(null), 600)
+    })
+
+    // Listen for activation event from ActivateButton
+    const handleAgentsActivating = () => {
+      setLogs([
+        mkEntry({ level: 'INFO', module: 'System', message: 'Activation requested — connecting to agents...' })
+      ])
+      setConnected(false)
+    }
+
+    window.addEventListener('agents:activating', handleAgentsActivating)
+
+    socket.connect()
+
+    return () => {
+      window.removeEventListener('agents:activating', handleAgentsActivating)
+      socket.removeAllListeners()
+      socket.disconnect()
+      initialized.current = false
+    }
   }, [])
 
   return (
@@ -135,7 +185,7 @@ export default function AgentTerminal() {
         style={{ boxShadow: '0 0 0 1px #1E1E2E, 0 32px 80px rgba(0,0,0,0.7)' }}
       >
         {/* macOS title bar */}
-        <div className="flex items-center gap-3 px-4 h-10 bg-surface-raised border-b border-border">
+        <div className="flex items-center gap-3 px-4 h-10 bg-surface-raised border-b border-border relative">
           <div className="flex gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#FF5F57] opacity-90" />
             <span className="w-3 h-3 rounded-full bg-[#FEBC2E] opacity-90" />
@@ -144,6 +194,22 @@ export default function AgentTerminal() {
           <span className="font-mono text-[11px] text-text-secondary absolute left-1/2 -translate-x-1/2">
             autobank-agents — zsh
           </span>
+          {/* LIVE / OFFLINE indicator */}
+          <div className="ml-auto flex items-center gap-1.5">
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{
+                background: connected ? '#00FF94' : '#FF4560',
+                boxShadow:  connected ? '0 0 6px #00FF94' : '0 0 6px #FF4560',
+              }}
+            />
+            <span
+              className="font-mono text-[9px] tracking-widest"
+              style={{ color: connected ? '#00FF94' : '#FF4560' }}
+            >
+              {connected ? 'LIVE' : 'OFFLINE'}
+            </span>
+          </div>
         </div>
 
         {/* Log area */}
@@ -163,6 +229,11 @@ export default function AgentTerminal() {
 
           {/* Log lines */}
           <div className="space-y-[2px]">
+            {logs.length === 0 && !connected && (
+              <div style={{ color: '#5555AA', opacity: 0.6 }} className="font-mono text-[11px] mt-20 text-center">
+                Waiting for activation... Click ACTIVATE AUTOBANK above
+              </div>
+            )}
             {logs.map((log) => {
               const isNew = log.id === newId
               const isTx  = log.level === 'TX'

@@ -1,5 +1,4 @@
 import Hero from '@/app/components/Hero'
-import ActivateButton from '@/app/components/ActivateButton'
 import ProtocolVitals from '@/app/components/ProtocolVitals'
 import SelfSustainingLoop from '@/app/components/SelfSustainingLoop'
 import dynamic from 'next/dynamic'
@@ -11,7 +10,6 @@ export default function Home() {
   return (
     <main>
       <Hero />
-      <ActivateButton />
       <AgentTerminal />
       <AgentStatusBar />
       <ProtocolVitals />

@@ -5,6 +5,13 @@ import { io } from 'socket.io-client'
 
 // ── Types ──────────────────────────────────────────────────
 type LogLevel = 'INFO' | 'SUCCESS' | 'AGENT' | 'TX' | 'WARN' | 'ERROR'
+type ActivateState = 'idle' | 'running' | 'complete'
+
+interface LogData {
+  txHash?: string
+  hash?: string
+  [key: string]: unknown
+}
 
 interface LogEntry {
   id:        number
@@ -12,6 +19,7 @@ interface LogEntry {
   level:     LogLevel
   module:    string
   message:   string
+  data?:     LogData
 }
 
 // ── Level mapping (server sends lowercase) ─────────────────
@@ -61,6 +69,54 @@ const LEVEL_BG: Record<LogLevel, string> = {
 }
 
 // ── Helpers ────────────────────────────────────────────────
+// Render message with clickable TX hash links
+function renderMessageWithLinks(message: string) {
+  const parts: (string | JSX.Element)[] = []
+  let lastIndex = 0
+  let match
+
+  // Regex matches: 0x followed by 6+ hex chars, optionally followed by ...
+  const regex = /0x[a-fA-F0-9]{6,}(\.\.\.)?/g
+  while ((match = regex.exec(message)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(message.substring(lastIndex, match.index))
+    }
+    // Extract the full matched text (including ... if present)
+    const displayHash = match[0]
+    // Strip ... to get the actual hash for the Etherscan URL
+    const actualHash = displayHash.replace(/\.\.\.$/, '')
+
+    parts.push(
+      <a
+        key={`tx-${match.index}`}
+        href={`https://sepolia.etherscan.io/tx/${actualHash}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          color: '#00D4FF',
+          textDecoration: 'none',
+          cursor: 'pointer',
+          borderBottom: '1px solid transparent',
+          transition: 'border-color 0.2s',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.borderBottom = '1px solid #00D4FF')}
+        onMouseLeave={(e) => (e.currentTarget.style.borderBottom = '1px solid transparent')}
+      >
+        {displayHash}
+      </a>
+    )
+    lastIndex = match.index + match[0].length
+  }
+
+  // Add remaining text
+  if (lastIndex < message.length) {
+    parts.push(message.substring(lastIndex))
+  }
+
+  return parts.length === 0 ? message : parts
+}
+
 let uid = 0
 function mkEntry(base: Omit<LogEntry, 'id' | 'timestamp'>, ts?: string): LogEntry {
   return {
@@ -81,11 +137,14 @@ const INITIAL_LOGS: LogEntry[] = LOG_POOL.map((e, i) => ({
 
 // ── Component ──────────────────────────────────────────────
 export default function AgentTerminal() {
-  const [logs, setLogs]           = useState<LogEntry[]>(INITIAL_LOGS)
-  const [newId, setNewId]         = useState<number | null>(null)
-  const [connected, setConnected] = useState(false)
-  const scrollRef                 = useRef<HTMLDivElement>(null)
-  const initialized               = useRef(false)
+  const [logs, setLogs]              = useState<LogEntry[]>(INITIAL_LOGS)
+  const [newId, setNewId]            = useState<number | null>(null)
+  const [connected, setConnected]    = useState(false)
+  const [activateState, setActivateState] = useState<ActivateState>('idle')
+  const [secondsRemaining, setSecondsRemaining] = useState(60)
+  const [activateLoading, setActivateLoading] = useState(false)
+  const scrollRef                    = useRef<HTMLDivElement>(null)
+  const initialized                  = useRef(false)
 
   // Auto-scroll to bottom whenever logs change
   useEffect(() => {
@@ -122,9 +181,9 @@ export default function AgentTerminal() {
       setTimeout(() => setNewId(null), 600)
     })
 
-    socket.on('agent:log', (data: { timestamp: string; level: string; module: string; message: string }) => {
+    socket.on('agent:log', (data: { timestamp: string; level: string; module: string; message: string; data?: LogData }) => {
       const entry = mkEntry(
-        { level: toLevel(data.level), module: data.module, message: data.message },
+        { level: toLevel(data.level), module: data.module, message: data.message, data: data.data },
         data.timestamp,
       )
       setNewId(entry.id)
@@ -151,6 +210,72 @@ export default function AgentTerminal() {
       initialized.current = false
     }
   }, [])
+
+  // Poll status every 2 seconds when activate is running
+  useEffect(() => {
+    if (activateState !== 'running') return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/status')
+        const { running } = await res.json()
+
+        if (!running) {
+          setActivateState('complete')
+          clearInterval(pollInterval)
+        }
+      } catch (err) {
+        console.error('Failed to poll status:', err)
+      }
+    }, 2000)
+
+    return () => clearInterval(pollInterval)
+  }, [activateState])
+
+  // Countdown timer when activate is running
+  useEffect(() => {
+    if (activateState !== 'running') return
+
+    const countdown = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdown)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(countdown)
+  }, [activateState])
+
+  // Handle activate button click
+  const handleActivateClick = async () => {
+    setActivateLoading(true)
+    window.dispatchEvent(new CustomEvent('agents:activating'))
+
+    try {
+      const res = await fetch('/api/activate', { method: 'POST' })
+      const data = await res.json()
+
+      if (data.status === 'started' || data.status === 'already_running') {
+        setActivateState('running')
+        setSecondsRemaining(60)
+      } else {
+        console.error('Activation failed:', data)
+      }
+    } catch (err) {
+      console.error('Failed to activate:', err)
+    } finally {
+      setActivateLoading(false)
+    }
+  }
+
+  // Reset activate button to idle
+  const handleActivateReset = () => {
+    setActivateState('idle')
+    setSecondsRemaining(60)
+  }
 
   return (
     <section className="w-full bg-surface py-20 px-4 md:px-8">
@@ -194,8 +319,33 @@ export default function AgentTerminal() {
           <span className="font-mono text-[11px] text-text-secondary absolute left-1/2 -translate-x-1/2">
             autobank-agents — zsh
           </span>
-          {/* LIVE / OFFLINE indicator */}
-          <div className="ml-auto flex items-center gap-1.5">
+          {/* Activate button in header */}
+          <div className="ml-auto flex items-center gap-3">
+            {activateState === 'idle' && (
+              <button
+                onClick={handleActivateClick}
+                disabled={activateLoading || connected}
+                className="px-2 py-0.5 text-[10px] font-mono border border-accent text-accent rounded-md
+                  hover:bg-accent hover:bg-opacity-5 transition-colors duration-200
+                  disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ▶ RUN
+              </button>
+            )}
+            {activateState === 'running' && (
+              <div className="text-[10px] font-mono text-accent tracking-wide">
+                ● {String(Math.floor(secondsRemaining / 60)).padStart(2, '0')}:{String(secondsRemaining % 60).padStart(2, '0')}
+              </div>
+            )}
+            {activateState === 'complete' && (
+              <button
+                onClick={handleActivateReset}
+                className="text-[10px] font-mono text-success cursor-pointer hover:opacity-70 transition-opacity"
+              >
+                ✓ DONE
+              </button>
+            )}
+            {/* LIVE / OFFLINE indicator */}
             <span
               className="w-1.5 h-1.5 rounded-full"
               style={{
@@ -270,7 +420,49 @@ export default function AgentTerminal() {
 
                     {/* Message */}
                     <span style={{ color: LEVEL_COLOR[log.level], opacity: isTx ? 1 : 0.9 }}>
-                      {log.message}
+                      {renderMessageWithLinks(log.message)}
+                      {log.data?.txHash && (
+                        <>
+                          <span> | </span>
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${log.data.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: '#00D4FF',
+                              textDecoration: 'none',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid transparent',
+                              transition: 'border-color 0.2s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.borderBottom = '1px solid #00D4FF')}
+                            onMouseLeave={(e) => (e.currentTarget.style.borderBottom = '1px solid transparent')}
+                          >
+                            {log.data.txHash}
+                          </a>
+                        </>
+                      )}
+                      {log.data?.hash && !log.data?.txHash && (
+                        <>
+                          <span> | </span>
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${log.data.hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: '#00D4FF',
+                              textDecoration: 'none',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid transparent',
+                              transition: 'border-color 0.2s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.borderBottom = '1px solid #00D4FF')}
+                            onMouseLeave={(e) => (e.currentTarget.style.borderBottom = '1px solid transparent')}
+                          >
+                            {log.data.hash}
+                          </a>
+                        </>
+                      )}
                     </span>
                   </div>
                 </div>

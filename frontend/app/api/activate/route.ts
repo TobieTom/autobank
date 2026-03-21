@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { join } from 'node:path'
 import { setRunning, getState } from '@/app/lib/agentState'
 
 const AGENTS_DIR = join(process.cwd(), '..', 'agents')
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     const { running, startedAt } = getState()
 

@@ -13,7 +13,7 @@ cmds = [
   "npm install --prefix frontend",
   "npm install --prefix agents",
   "cd frontend && npm run build",
-  "cd agents && npx tsc --outDir dist"
+  "cd agents && npx tsc"
 ]
 
 [start]

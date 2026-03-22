@@ -8,12 +8,15 @@ import { ArbiterAgent } from './arbiterAgent'
 import { startWsServer, broadcastLog, broadcastStats } from './wsServer'
 import * as fs from 'fs'
 import * as path from 'path'
+import * as http from 'http'
 
 const logger = new Logger('AUTOBANK')
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+let loopActive = false
 
 async function main(): Promise<void> {
   try {
@@ -97,12 +100,7 @@ ARBITER_ADDRESS=${arbiterWallet.address}
       lenderWallet.address  // lender address as protocol treasury
     )
 
-    logger.info('All agents initialized. Starting autonomous loop...')
-
-    setTimeout(() => {
-      logger.info('Auto-shutdown after 60s test window')
-      process.exit(0)
-    }, 60000)
+    logger.info('✓ All agents initialized. Waiting for activation...')
 
     // ─── Reputation Seeding for Demo ──────────────────────────────────────
     logger.info('━━━ Seeding borrower reputation for demo ━━━')
@@ -118,12 +116,58 @@ ARBITER_ADDRESS=${arbiterWallet.address}
     const seededScores = reputationEngine.getAllScores()
     const seededBorrower = seededScores.find((s) => s.agentId === 'borrower-001')
     logger.info('Borrower seeded score', { agentId: 'borrower-001', score: seededBorrower?.score })
-    logger.info('Reputation seeded. Borrower ready for autonomous loop.')
+    logger.info('Reputation seeded. Awaiting activation...')
 
-    // ─── Autonomous Loop — continuous until Ctrl+C or auto-shutdown ──────
-    let cycle = 0
-    while (true) {
-      cycle++
+    // ─── Start HTTP server for /activate endpoint ──────
+    const PORT = process.env.PORT || 3001
+    const httpServer = http.createServer(async (req, res) => {
+      if (req.method === 'POST' && req.url === '/activate') {
+        if (loopActive) {
+          res.writeHead(409, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ status: 'already_active' }))
+          return
+        }
+        loopActive = true
+        logger.info('✓ Activation received — starting autonomous loop')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ status: 'activated' }))
+        // Start loop in background
+        runAutonomousLoop(walletManager, reputationEngine, lenderAgent, borrowerAgent, arbiterAgent, lenderWallet)
+        return
+      }
+      if (req.method === 'GET' && req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ status: loopActive ? 'active' : 'standby' }))
+        return
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'not found' }))
+    })
+
+    httpServer.listen(PORT, () => {
+      logger.info(`HTTP server listening on port ${PORT}`)
+    })
+
+    return // Exit main, wait for /activate to trigger loop
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    logger.error(`FATAL: ${message}`)
+    process.exit(1)
+  }
+}
+
+async function runAutonomousLoop(
+  walletManager: WalletManager,
+  reputationEngine: ReputationEngine,
+  lenderAgent: LenderAgent,
+  borrowerAgent: BorrowerAgent,
+  arbiterAgent: ArbiterAgent,
+  lenderWallet: any
+): Promise<void> {
+  let cycle = 0
+  while (loopActive) {
+    cycle++
+    try {
       const currentBlock = await walletManager.getBlockNumber()
       logger.info(`── Cycle ${cycle} — Block ${currentBlock} ──`)
 
@@ -194,14 +238,15 @@ ARBITER_ADDRESS=${arbiterWallet.address}
 
       broadcastStats(stats)
 
-      logger.info('Waiting 2s before next cycle...')
-      await sleep(2000)
+      logger.info('Waiting 5 minutes before next cycle...')
+      await sleep(300000) // 5 minutes
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.error(`Loop error: ${message}`)
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    logger.error(`FATAL: ${message}`)
-    process.exit(1)
   }
+  loopActive = false
+  logger.info('Autonomous loop stopped')
 }
 
 main()

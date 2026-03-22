@@ -128,13 +128,6 @@ function mkEntry(base: Omit<LogEntry, 'id' | 'timestamp'>, ts?: string): LogEntr
   }
 }
 
-// Seed initial lines with staggered timestamps
-const INITIAL_LOGS: LogEntry[] = LOG_POOL.map((e, i) => ({
-  ...e,
-  id:        ++uid,
-  timestamp: new Date(Date.now() - (10 - i) * 1500).toISOString().replace('T', ' ').slice(0, 19) + 'Z',
-}))
-
 // ── Component ──────────────────────────────────────────────
 export default function AgentTerminal() {
   const [logs, setLogs]              = useState<LogEntry[]>([])
@@ -142,7 +135,6 @@ export default function AgentTerminal() {
   const [connected, setConnected]    = useState(false)
   const [activateState, setActivateState] = useState<ActivateState>('idle')
   const [secondsRemaining, setSecondsRemaining] = useState(60)
-  const [activateLoading, setActivateLoading] = useState(false)
   const scrollRef                    = useRef<HTMLDivElement>(null)
   const initialized                  = useRef(false)
 
@@ -253,7 +245,6 @@ export default function AgentTerminal() {
   // Handle activate button click
   const handleActivateClick = async () => {
     setLogs([])
-    setActivateLoading(true)
     window.dispatchEvent(new CustomEvent('agents:activating'))
 
     try {
@@ -268,8 +259,6 @@ export default function AgentTerminal() {
       }
     } catch (err) {
       console.error('Failed to activate:', err)
-    } finally {
-      setActivateLoading(false)
     }
   }
 

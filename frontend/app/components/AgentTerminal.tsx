@@ -142,8 +142,6 @@ export default function AgentTerminal() {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 3000,
-      pingTimeout: 60000,
-      pingInterval: 25000,
     })
 
     socket.on('connect', () => {

@@ -29,6 +29,16 @@ const nextConfig = {
     ];
   },
 
+  // Proxy WebSocket traffic through Next.js for Railway single-port deployment
+  async rewrites() {
+    return [
+      {
+        source: '/socket.io/:path*',
+        destination: 'http://localhost:3001/socket.io/:path*',
+      },
+    ];
+  },
+
   // Environment variables available to client
   env: {
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001',

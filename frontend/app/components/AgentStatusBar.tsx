@@ -220,7 +220,8 @@ export default function AgentStatusBar() {
     if (initialized.current) return
     initialized.current = true
 
-    const socket = io('http://localhost:3001', { autoConnect: false })
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001'
+    const socket = io(wsUrl, { autoConnect: false })
 
     socket.on('agent:stats', (stats: SystemStats) => {
       setAgents(prev => prev.map(agent => ({

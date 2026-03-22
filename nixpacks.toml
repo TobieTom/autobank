@@ -9,7 +9,12 @@ cmds = [
 ]
 
 [phases.build]
-cmds = ["cd frontend && npm run build"]
+cmds = [
+  "npm install --prefix frontend",
+  "npm install --prefix agents",
+  "cd frontend && npm run build",
+  "cd agents && npx tsc --outDir dist"
+]
 
 [start]
 cmd = "npm start"

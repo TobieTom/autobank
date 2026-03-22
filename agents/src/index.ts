@@ -118,7 +118,7 @@ ARBITER_ADDRESS=${arbiterWallet.address}
     logger.info('Borrower seeded score', { agentId: 'borrower-001', score: seededBorrower?.score })
     logger.info('Reputation seeded. Awaiting activation...')
 
-    // ─── Start HTTP server for /activate endpoint ──────
+    // ─── Create shared HTTP server for both WebSocket and REST endpoints ──────
     const PORT = process.env.PORT || 3001
     const httpServer = http.createServer(async (req, res) => {
       if (req.method === 'POST' && req.url === '/activate') {
@@ -144,8 +144,12 @@ ARBITER_ADDRESS=${arbiterWallet.address}
       res.end(JSON.stringify({ error: 'not found' }))
     })
 
+    // Attach WebSocket to the shared HTTP server
+    startWsServer(httpServer)
+
+    // Start the shared server ONCE
     httpServer.listen(PORT, () => {
-      logger.info(`HTTP server listening on port ${PORT}`)
+      logger.info(`✓ Server listening on port ${PORT}`)
     })
 
     return // Exit main, wait for /activate to trigger loop

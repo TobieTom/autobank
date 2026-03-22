@@ -13,7 +13,8 @@ export interface LogEntry {
 
 const logger = new Logger('WsServer')
 
-const httpServer = http.createServer()
+let httpServer: http.Server
+let io: Server
 
 // Get allowed origins from environment, or default to localhost
 const getAllowedOrigins = (): string[] => {
@@ -25,25 +26,11 @@ const getAllowedOrigins = (): string[] => {
   return ['http://localhost:3000', 'http://localhost:3001']
 }
 
-const io = new Server(httpServer, {
-  cors: {
-    origin: getAllowedOrigins(),
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-})
-
-io.on('connection', (socket) => {
-  logger.info(`Client connected`, { socketId: socket.id })
-
-  socket.on('disconnect', () => {
-    logger.info(`Client disconnected`, { socketId: socket.id })
-  })
-})
-
 export function broadcastLog(entry: LogEntry): void {
   try {
-    io.emit('agent:log', entry)
+    if (io) {
+      io.emit('agent:log', entry)
+    }
   } catch {
     // Never throw from broadcast
   }
@@ -51,15 +38,32 @@ export function broadcastLog(entry: LogEntry): void {
 
 export function broadcastStats(stats: SystemStats): void {
   try {
-    io.emit('agent:stats', stats)
+    if (io) {
+      io.emit('agent:stats', stats)
+    }
   } catch {
     // Never throw from broadcast
   }
 }
 
-export function startWsServer(): void {
-  const WS_PORT = 3001 // Always use 3001 for WebSocket server
-  httpServer.listen(WS_PORT, () => {
-    logger.info(`WebSocket server listening on port ${WS_PORT}`)
+export function startWsServer(existingHttpServer: http.Server): void {
+  httpServer = existingHttpServer
+
+  io = new Server(httpServer, {
+    cors: {
+      origin: getAllowedOrigins(),
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
   })
+
+  io.on('connection', (socket) => {
+    logger.info(`Client connected`, { socketId: socket.id })
+
+    socket.on('disconnect', () => {
+      logger.info(`Client disconnected`, { socketId: socket.id })
+    })
+  })
+
+  logger.info('WebSocket server attached to HTTP server')
 }

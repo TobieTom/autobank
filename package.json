@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "build": "cd frontend && npm install && npm run build && cd ../agents && npm install",
-    "start": "concurrently \"PORT=${PORT:-3000} node frontend/.next/standalone/server.js\" \"cd agents && node dist/index.js\"",
+    "start": "cd agents && node dist/index.js",
     "dev": "concurrently \"cd frontend && npm run dev\" \"cd agents && npx ts-node src/index.ts\""
   },
   "dependencies": {

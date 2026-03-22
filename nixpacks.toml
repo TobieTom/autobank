@@ -2,20 +2,13 @@
 nixPkgs = ["nodejs_20", "npm-9_x"]
 
 [phases.install]
-cmds = [
-  "npm install",
-  "npm install --prefix frontend",
-  "npm install --prefix agents"
-]
+cmds = ["npm install --prefix agents"]
 
 [phases.build]
 cmds = [
-  "npm install --prefix frontend",
   "npm install --prefix agents",
-  "cd frontend && npm run build",
-  "cp -r frontend/.next/static frontend/.next/standalone/.next/static",
   "cd agents && (npx tsc || true)"
 ]
 
 [start]
-cmd = "npm start"
+cmd = "cd agents && node dist/index.js"

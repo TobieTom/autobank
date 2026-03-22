@@ -142,6 +142,8 @@ export default function AgentTerminal() {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 3000,
+      pingTimeout: 60000,
+      pingInterval: 25000,
     })
 
     socket.on('connect', () => {
@@ -175,7 +177,6 @@ export default function AgentTerminal() {
       setLogs([
         mkEntry({ level: 'INFO', module: 'System', message: 'Activation requested — connecting to agents...' })
       ])
-      setConnected(false)
     }
 
     window.addEventListener('agents:activating', handleAgentsActivating)
@@ -237,7 +238,7 @@ export default function AgentTerminal() {
       const res = await fetch('/api/activate', { method: 'POST' })
       const data = await res.json()
 
-      if (data.status === 'started' || data.status === 'already_running') {
+      if (data.status === 'activated' || data.status === 'already_active') {
         setActivateState('running')
         setSecondsRemaining(60)
       } else {

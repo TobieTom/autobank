@@ -35,20 +35,6 @@ function toLevel(raw: string): LogLevel {
   return map[raw.toLowerCase()] ?? 'INFO'
 }
 
-// ── Simulated log pool — kept as seed data ─────────────────
-const LOG_POOL: Omit<LogEntry, 'id' | 'timestamp'>[] = [
-  { level: 'INFO',    module: 'ArbiterAgent',     message: 'Monitor loop starting — block 10491047, 3 active loans' },
-  { level: 'AGENT',   module: 'BorrowerAgent',    message: 'Borrow decision made — amount: 10 USDT, duration: 200 blocks' },
-  { level: 'AGENT',   module: 'ReputationEngine', message: 'Loan request recorded — loansRequested: 7, score: 75.36' },
-  { level: 'AGENT',   module: 'LenderAgent',      message: 'Evaluating loan request — borrower: 0xA9dD...587a4, amount: 10 USDT' },
-  { level: 'SUCCESS', module: 'LenderAgent',      message: 'Loan approved — 10 USDT at 4% interest | score: 77.86, reasoning: strong repayment history' },
-  { level: 'TX',      module: 'WalletManager',    message: 'USDT transfer submitted | txHash: 0x5ffb6a258496f4f1fb217886d64c46470448...' },
-  { level: 'TX',      module: 'WalletManager',    message: 'USDT transfer confirmed | txHash: 0x5ffb6a258496f4f1fb217886d64c46470448...' },
-  { level: 'TX',      module: 'LenderAgent',      message: 'Loan issued successfully | loanId: 1774099347619 → 0xA9dD...587a4 | dueBlock: 10491249' },
-  { level: 'SUCCESS', module: 'ArbiterAgent',     message: 'Protocol fee collected — 0.05 USDT | totalFeesCollected: 0.05' },
-  { level: 'AGENT',   module: 'ReputationEngine', message: 'Repayment recorded — agentId: borrower-001, amount: 10 USDT, score: 79.17' },
-]
-
 // ── Level styling maps ─────────────────────────────────────
 const LEVEL_COLOR: Record<LogLevel, string> = {
   INFO:    '#8888AA',

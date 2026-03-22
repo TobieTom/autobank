@@ -137,7 +137,7 @@ const INITIAL_LOGS: LogEntry[] = LOG_POOL.map((e, i) => ({
 
 // ── Component ──────────────────────────────────────────────
 export default function AgentTerminal() {
-  const [logs, setLogs]              = useState<LogEntry[]>(INITIAL_LOGS)
+  const [logs, setLogs]              = useState<LogEntry[]>([])
   const [newId, setNewId]            = useState<number | null>(null)
   const [connected, setConnected]    = useState(false)
   const [activateState, setActivateState] = useState<ActivateState>('idle')
@@ -170,7 +170,7 @@ export default function AgentTerminal() {
       setConnected(true)
       const entry = mkEntry({ level: 'INFO', module: 'System', message: 'Connected to AUTOBANK agents — live feed active' })
       setNewId(entry.id)
-      setLogs(prev => [...prev, entry].slice(-100))
+      setLogs([entry])
       setTimeout(() => setNewId(null), 600)
     })
 
@@ -252,6 +252,7 @@ export default function AgentTerminal() {
 
   // Handle activate button click
   const handleActivateClick = async () => {
+    setLogs([])
     setActivateLoading(true)
     window.dispatchEvent(new CustomEvent('agents:activating'))
 
@@ -325,10 +326,8 @@ export default function AgentTerminal() {
             {activateState === 'idle' && (
               <button
                 onClick={handleActivateClick}
-                disabled={activateLoading || connected}
                 className="px-2 py-0.5 text-[10px] font-mono border border-accent text-accent rounded-md
-                  hover:bg-accent hover:bg-opacity-5 transition-colors duration-200
-                  disabled:opacity-50 disabled:cursor-not-allowed"
+                  hover:bg-accent hover:bg-opacity-5 transition-colors duration-200"
               >
                 ▶ RUN
               </button>
